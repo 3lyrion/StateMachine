@@ -132,14 +132,20 @@ public:
 		m_states.emplace(state->KEY, std::move(state));
 	}
 
+	void prohibitState(Key key)
+	{
+		m_prohibited.insert(key);
+	}
+
 	void prohibitStates(std::unordered_set<Key>&& keys)
 	{
 		m_prohibited = std::move(keys);
 	}
 
-	void prohibitState(Key key)
+	void prohibitAllStates()
 	{
-		m_prohibited.insert(key);
+		for (auto& [_key, _] : m_states)
+			prohibitState(_key);
 	}
 
 	void allowState(Key key)
@@ -149,12 +155,17 @@ public:
 
 	void allowOnly(Key key)
 	{
-		allowAllStates();
-
-		for (auto& [_key, _] : m_states)
-			prohibitState(_key);
+		prohibitAllStates();
 
 		allowState(key);
+	}
+
+	void allowOnly(std::unordered_set<Key>&& keys)
+	{
+		prohibitAllStates();
+
+		for (auto _key : keys)
+			allowState(_key);
 	}
 
 	void allowAllStates()
@@ -164,8 +175,8 @@ public:
 
 	void setEnabled(bool enabled)
 	{
-		//if (m_enabled == enabled)
-		//	return;
+		/*if (m_enabled == enabled)
+			return;*/
 
 		m_enabled = enabled;
 
@@ -175,7 +186,7 @@ public:
 
 	void setNext(Key key)
 	{
-		if (m_currState->KEY == key || m_prohibited.contains(key))
+		if (m_prohibited.contains(key) || m_currState->KEY == key)
 			return;
 
 		auto entry = m_states.find(key);
@@ -183,6 +194,9 @@ public:
 		{
 			m_currState->onExit();
 
+			allowAllStates();
+
+			m_prevState = m_currState;
 			m_currState = entry->second.get();
 
 			m_currState->onEnter();
@@ -195,6 +209,11 @@ public:
 		return m_currState;
 	}
 
+	MachineState const* getPreviousState() const
+	{
+		return m_prevState;
+	}
+
 private:
 	using StatePtr  = std::unique_ptr<MachineState>;
 	using ActionMap = std::unordered_map<Key, std::any>;
@@ -204,6 +223,7 @@ private:
 	bool m_enabled = true;
 
 	MachineState*									m_currState{};
+	MachineState*									m_prevState{};
 	std::unordered_map<std::type_index, ActionMap>	m_subscriptions;
 	std::unordered_map<Key, StatePtr>				m_states;
 	std::unordered_set<Key>							m_prohibited;
